@@ -1,0 +1,11 @@
+# Environment variables
+.env
+*.env
+
+# Python
+venv/
+__pycache__/
+*.pyc
+
+# Chroma database
+db/chroma_db/
