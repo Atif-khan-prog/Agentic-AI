@@ -1,66 +1,61 @@
-import os
-from langchain_community.document_loaders import TextLoader, DirectoryLoader
+import shutil
+from pathlib import Path
+
+from langchain_core.documents import Document
 from langchain_chroma import Chroma
-from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_text_splitters import CharacterTextSplitter
 
-def load_docs():
-    loader = DirectoryLoader(
-    "docs",
-    glob="**/*.txt",
-    loader_cls=TextLoader,
-    loader_kwargs={"encoding": "utf-8"}
+from embeddings import FastEmbedEmbeddings
+
+DATABASE_PATH = "db/chroma_db"
+
+
+def load_docs(folder="docs"):
+    docs = []
+    for path in Path(folder).rglob("*.txt"):
+        text = path.read_text(encoding="utf-8")
+        if text.strip():
+            docs.append(Document(page_content=text, metadata={"source": str(path)}))
+
+    print(f"Loaded {len(docs)} documents" if docs else "No docs found")
+    return docs
+
+
+def split_docs(docs, chunk_size=1000, chunk_overlap=0):
+    splitter = CharacterTextSplitter(
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
     )
+    chunks = splitter.split_documents(docs)
 
-    documents = loader.load()
-    if len(documents) == 0 :
-        print('no docs')
-    else:
-        print('whatsapp')
-
-    return documents
-
-def split_docs(docs, chunk_size = 1000, chunk_overlap=0):
-    textSplitter = CharacterTextSplitter(
-        chunk_size = chunk_size,
-        chunk_overlap = chunk_overlap
-    )
-
-    chunks = textSplitter.split_documents(docs)
-
-    if len(chunks) == 0:
-        print('No chunks bro')
-    else:
-        print('shi is chunked', len(chunks))
-
+    print(f"Created {len(chunks)} chunks" if chunks else "No chunks created")
     return chunks
 
-def create_vector_store(chunks, database_path ='db/chroma_db'):
-     
-    embedding_model = HuggingFaceEmbeddings(
-    model_name="sentence-transformers/all-MiniLM-L6-v2",
-    model_kwargs={"device": "cpu"}
-    )
 
-    vectorestore = Chroma.from_documents(
+def create_vector_store(chunks, database_path=DATABASE_PATH):
+    # Start fresh so re-running doesn't create duplicates
+    shutil.rmtree(database_path, ignore_errors=True)
+
+    vectorstore = Chroma.from_documents(
         documents=chunks,
-        embedding=embedding_model,
+        embedding=FastEmbedEmbeddings(),
         persist_directory=database_path,
-        collection_metadata={'hnsw:space':'cosine'}
+        collection_metadata={"hnsw:space": "cosine"},
     )
 
-    print('vector store has successfully created')
-    return vectorestore
-
+    print("Vector store created successfully")
+    return vectorstore
 
 
 def main():
-    #Load files
     docs = load_docs()
-    #Create Chunks
+    if not docs:
+        return
     chunks = split_docs(docs)
-    #Create vector store
-    vectorstore = create_vector_store(chunks)
+    if not chunks:
+        return
+    create_vector_store(chunks)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()
