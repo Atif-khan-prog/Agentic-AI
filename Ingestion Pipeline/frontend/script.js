@@ -1,3 +1,5 @@
+const API_URL = "https://agentic-ai-ativ.onrender.com";
+
 const questionInput = document.getElementById("question");
 const sendButton = document.getElementById("send-btn");
 const chatBox = document.getElementById("chat-box");
@@ -21,9 +23,17 @@ async function sendMessage() {
     sendButton.disabled = true;
     sendButton.textContent = "Thinking...";
 
+    // Render's free tier can take up to a minute to wake up
+    const wakeHint = setTimeout(() => {
+        sendButton.textContent = "Waking up server...";
+    }, 8000);
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 90000);
+
     try {
 
-        const response = await fetch("http://127.0.0.1:8000/chat", {
+        const response = await fetch(`${API_URL}/chat`, {
             method: "POST",
 
             headers: {
@@ -32,11 +42,13 @@ async function sendMessage() {
 
             body: JSON.stringify({
                 question: question
-            })
+            }),
+
+            signal: controller.signal
         });
 
         if (!response.ok) {
-            throw new Error("Server error");
+            throw new Error("Server error: " + response.status);
         }
 
         const data = await response.json();
@@ -48,12 +60,16 @@ async function sendMessage() {
 
         console.error(error);
 
-        addMessage(
-            "Sorry, I couldn't connect to the FastAPI server.",
-            "bot"
-        );
+        const msg = error.name === "AbortError"
+            ? "The server took too long to respond. Please try again."
+            : "Sorry, I couldn't connect to the server.";
+
+        addMessage(msg, "bot");
 
     } finally {
+
+        clearTimeout(wakeHint);
+        clearTimeout(timeout);
 
         sendButton.disabled = false;
         sendButton.textContent = "Send";
