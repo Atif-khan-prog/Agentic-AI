@@ -1,8 +1,9 @@
-﻿fastapi
+fastapi
 uvicorn
+python-dotenv
+groq
 chromadb
 langchain-chroma
 langchain-core
-groq
-python-dotenv
-langchain_huggingface
+langchain-text-splitters
+fastembed
