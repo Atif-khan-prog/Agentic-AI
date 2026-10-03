@@ -1,68 +1,46 @@
 import os
-from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_chroma import Chroma
-from sentence_transformers import CrossEncoder
 from dotenv import load_dotenv
 from groq import Groq
-
-
-database_path = 'db/chroma_db'
+from fastembed import TextEmbedding
+from langchain_core.embeddings import Embeddings
+from langchain_chroma import Chroma
 
 load_dotenv()
 
-client = Groq(
-    api_key=os.getenv("GROQ_API_KEY")
-)
+DATABASE_PATH = "db/chroma_db"
 
-embedding_model = HuggingFaceEmbeddings(
-    model_name="sentence-transformers/all-MiniLM-L6-v2",
-    model_kwargs={"device": "cpu"}
-)
+client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
+
+class FastEmbedEmbeddings(Embeddings):
+    """Lightweight embeddings (ONNX, no PyTorch). Same model as before."""
+
+    def __init__(self, model_name="sentence-transformers/all-MiniLM-L6-v2"):
+        self.model = TextEmbedding(model_name=model_name)
+
+    def embed_documents(self, texts):
+        return [vec.tolist() for vec in self.model.embed(texts)]
+
+    def embed_query(self, text):
+        return next(iter(self.model.embed([text]))).tolist()
+
+
+embedding_model = FastEmbedEmbeddings()
 
 db = Chroma(
-    persist_directory=database_path,
+    persist_directory=DATABASE_PATH,
     embedding_function=embedding_model,
-    collection_metadata={'hnsw:space': 'cosine'}
+    collection_metadata={"hnsw:space": "cosine"},
 )
 
-reranker = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
 
-def get_answer(query):
+def get_answer(query: str) -> str:
+    # Retrieval: top 4 most similar chunks
+    docs = db.similarity_search(query, k=4)
 
-    retriever = db.as_retriever(
-    search_kwargs={'k': 10}
-)
+    # Augmentation: combine chunks into context
+    context = "\n\n".join(doc.page_content for doc in docs)
 
-    candidates = retriever.invoke(query)
-
-    # Create pairs: [question, document]
-    pairs = [
-        [query, doc.page_content]
-        for doc in candidates
-    ]
-
-    # Score each document against the question
-    scores = reranker.predict(pairs)
-
-    # Sort documents by score, highest first
-    ranked_docs = sorted(
-        zip(scores, candidates),
-        key=lambda x: x[0],
-        reverse=True
-    )
-
-    # Take the best 3 documents
-    relevant_ans = [
-        doc for score, doc in ranked_docs[:3]
-    ]
-
-    # Augmentation: combine retrieved chunks into context
-    context = '\n\n'.join(
-        doc.page_content for doc in relevant_ans
-    )
-
-    # Create prompt containing context + question
     prompt = f"""
 You are a RAG assistant.
 
@@ -82,17 +60,11 @@ Question:
 Answer:
 """
 
-    # Generation: send augmented prompt to Ollama
+    # Generation: send augmented prompt to Groq
     response = client.chat.completions.create(
-    model="openai/gpt-oss-20b",
-    messages=[
-        {
-            "role": "user",
-            "content": prompt
-        }
-    ]
-)
+        model="openai/gpt-oss-20b",
+        messages=[{"role": "user", "content": prompt}],
+    )
 
     return response.choices[0].message.content
 
-    
