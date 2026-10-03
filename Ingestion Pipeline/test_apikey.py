@@ -1,18 +1,21 @@
-from google import genai
-from dotenv import load_dotenv
 import os
+from dotenv import load_dotenv
+from groq import Groq
 
 load_dotenv()
 
-api_key = os.getenv("GEMINI_API_KEY")
-
-print("API key loaded:", bool(api_key))
-
-client = genai.Client(api_key=api_key)
-
-response = client.models.generate_content(
-    model="gemini-3.5-flash-lite",
-    contents="What is Microsoft? Answer in one sentence."
+client = Groq(
+    api_key=os.getenv("GROQ_API_KEY")
 )
 
-print(response.text)
+response = client.chat.completions.create(
+    model="openai/gpt-oss-20b",
+    messages=[
+        {
+            "role": "user",
+            "content": "What is Retrieval Augmented Generation (RAG)? Explain briefly."
+        }
+    ]
+)
+
+print(response.choices[0].message.content)

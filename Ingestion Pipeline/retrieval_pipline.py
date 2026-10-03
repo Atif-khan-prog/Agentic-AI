@@ -1,18 +1,17 @@
 import os
-from urllib import response
-
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
 from sentence_transformers import CrossEncoder
-from openai import OpenAI
 from dotenv import load_dotenv
+from groq import Groq
+
+
 database_path = 'db/chroma_db'
 
 load_dotenv()
 
-client = OpenAI(
-    base_url="https://openrouter.ai/api/v1",
-    api_key=os.getenv("OPENROUTER_API_KEY")
+client = Groq(
+    api_key=os.getenv("GROQ_API_KEY")
 )
 
 embedding_model = HuggingFaceEmbeddings(
@@ -85,7 +84,7 @@ Answer:
 
     # Generation: send augmented prompt to Ollama
     response = client.chat.completions.create(
-    model="openai/gpt-oss-20b:free",
+    model="openai/gpt-oss-20b",
     messages=[
         {
             "role": "user",
@@ -95,3 +94,5 @@ Answer:
 )
 
     return response.choices[0].message.content
+
+    
